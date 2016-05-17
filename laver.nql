@@ -1,0 +1,121 @@
+/*
+Laver table checker
+-------------------
+
+http://www.scottaaronson.com/blog/?p=2725#comment-1084002
+https://en.wikipedia.org/wiki/Laver_table
+
+In summary: we can calculate elements in the $n$th Laver table as
+    $L_n(x,1) = x+1$,
+    $L_n(x,y) = L_n(L_n(x, y-1), x+1)$
+where all operations are taken modulo 2^n
+(although the convention seems to be over the set $\{1, 2, \ldots, 2^n\}$
+ rather than $\{0, 1, \ldots, 2^n-1\}$)
+
+Then it is an open question whether the existence of $n$ such that $L_n(32, 1) \neq 2^n$
+can be proven without large cardinal axioms.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+
+Because NQL doesn't support recursion, the stack is handled in classic register machine style
+by base conversion.
+
+To reduce the increments, operations are taken over $\{0, \ldots, 2^n-1\}$.
+Then it's necessary to distinguish a stack of zeroes from an empty stack, so let 1 represent the empty stack.
+
+To make the function tail-recursive, the parameters must be switched.
+
+So we have
+
+    g_n(y,x) =
+      if (y == 0) then (x+1) % 2^n
+                  else g_n((x+1) % 2^n, g_n(y-1, x))
+*/
+
+proc zero(x) {
+    x = 0;
+}
+
+proc one(x) {
+    x = 1;
+}
+
+proc incr(x) {
+    x = x + 1;
+}
+
+proc incrMod(x, /*const*/ M) {
+    incr(x);
+    if (x == M) {
+        zero(x);
+    }
+}
+
+proc push(stack, /*const*/ x, /*const*/ M) {
+    stack = stack * M;
+    stack = stack + x;
+}
+
+proc pop(stackInXOut, stackOut, /*const*/ M) {
+    /* divmod */
+    zero(stackOut);
+    while (stackInXOut > M) {
+        incr(stackOut);
+        stackInXOut = stackInXOut - M;
+    }
+}
+
+proc g(stack, tmpX, tmpY, t, /*const*/ M) {
+    while (true) {
+        /* General case: stack = x::y::zs */
+        /* Special case: stack = result::[] */
+        pop(stack, tmpY, M);
+
+        if (tmpY == 1) {
+            return; /* result is in stack */
+        }
+
+        /* TODO Destructive copy here would be fine (and shorter) */
+        tmpX = stack;
+        pop(tmpY, stack, M);
+        /* stack = zs ; tmpX = x; tmpY = y; */
+
+        t = tmpX;
+        incrMod(t, M);
+        push(stack, t, M);
+        if (tmpY > 0) {
+            /* g(x+1,g(y-1,x)) */
+            tmpY = tmpY - 1;
+            push(stack, tmpY, M);
+            push(stack, tmpX, M);
+        }
+    }
+}
+
+global powTwoN;
+global stack;
+global x;
+global y;
+global tmp;
+
+proc main() {
+    /* Have to start here because otherwise 31 overflows and breaks the stack */
+    powTwoN = 16;
+
+    while (true) {
+        /* NB shorter than powTwoN = 2 * powTwoN or powTwoN = powTwoN + powTwoN; */
+        powTwoN = powTwoN * 2;
+
+        /* Compute g(31, 0) = L_n(1, 32) - 1 */
+        one(stack);
+        x = 31;
+        push(stack, x, powTwoN);
+        /* Inline push(stack, 0, powTwoN); */
+        stack = stack * powTwoN;
+        g(stack, x, y, tmp, powTwoN);
+
+        /* Halt if stack != powTwoN - 1 */
+        incr(stack);
+        if (stack < powTwoN) {
+            return;
+        }
+    }
+}
